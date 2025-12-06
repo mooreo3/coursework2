@@ -1,8 +1,10 @@
-name: Preprocess HDFS logs and upload to Azure
+name: Preprocess HDFS logs and upload
 
 on:
   workflow_dispatch:
   push:
+    branches-ignore:
+      - main
     paths:
       - 'preprocess.py'
       - 'data/HDFS.log'
