@@ -1,0 +1,58 @@
+name: Preprocess HDFS logs and upload to Azure
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'preprocess.py'
+      - 'data/HDFS.log'
+      - 'requirements.txt'
+      - '.github/workflows/preprocess-and-upload.yml'
+
+jobs:
+  preprocess-and-upload:
+    runs-on: ubuntu-latest
+
+    env:
+      AZURE_STORAGE_ACCOUNT: your_storage_account_name
+      AZURE_STORAGE_CONTAINER: your-container-name
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run preprocessing script
+        run: |
+          python preprocess.py \
+            --input data/HDFS.log \
+            --out_df output/output.csv
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload cleaned CSV to Azure Blob with versioning
+        run: |
+          VERSION="run-${{ github.run_number }}-$(date +"%Y%m%d-%H%M%S")"
+          BLOB_NAME="datasets/hdfs_cleaned_${VERSION}.csv"
+
+          echo "Uploading as $BLOB_NAME"
+
+          az storage blob upload \
+            --container-name $AZURE_STORAGE_CONTAINER \
+            --file output/output.csv \
+            --name $BLOB_NAME \
+            --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
+        env:
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
