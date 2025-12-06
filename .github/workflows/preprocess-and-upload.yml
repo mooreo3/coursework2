@@ -40,5 +40,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: processed-dataset
-          path: data/processed.csv
+          path: data/output.csv
 
