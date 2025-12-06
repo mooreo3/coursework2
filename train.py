@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 import pandas as pd
+import argparse
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -11,14 +12,17 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 import joblib
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--run-id", default="local")
+args = parser.parse_args()
+run_id = args.run_id
 
-DATA_PATH = Path("output/output.csv")   # adjust if your CSV lives somewhere else
+DATA_PATH = Path("output/output.csv")
 MODEL_DIR = Path("models")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_data(path: Path) -> pd.DataFrame:
-    # low_memory=False to avoid the mixed dtypes warning
     df = pd.read_csv(path, low_memory=False)
 
     if "incident" not in df.columns:
@@ -27,19 +31,16 @@ def load_data(path: Path) -> pd.DataFrame:
             f"Make sure you're using the output from your preprocess script."
         )
 
-    # Drop rows where label is missing
     df = df.dropna(subset=["incident"])
 
-    # Make sure incident is int (0/1)
     df["incident"] = df["incident"].astype(int)
 
     return df
 
 
 def build_feature_target(df: pd.DataFrame):
-    # Columns we absolutely don't want as features
     drop_cols = [
-        "incident",      # label
+        "incident",
         "date",
         "time",
         "msg",
@@ -58,7 +59,6 @@ def build_feature_target(df: pd.DataFrame):
     X = df.drop(columns=drop_cols, errors="ignore")
     y = df["incident"]
 
-    # Infer numeric vs categorical
     numeric_features = X.select_dtypes(include=["int64", "int32", "float64", "float32"]).columns.tolist()
     categorical_features = [c for c in X.columns if c not in numeric_features]
 
@@ -127,12 +127,10 @@ def main():
     print("Classification report:")
     print(classification_report(y_test, y_pred))
 
-    # Save model pipeline (preprocessing + model together)
-    model_path = MODEL_DIR / "model_v1.pkl"
+    model_path = MODEL_DIR / f"model_{run_id}.pkl"
     joblib.dump(clf, model_path)
 
-    # Save metrics
-    metrics_path = MODEL_DIR / "metrics_v1.json"
+    metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
     with open(metrics_path, "w") as f:
         json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
 
