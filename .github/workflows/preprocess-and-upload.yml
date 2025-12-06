@@ -36,17 +36,9 @@ jobs:
             --input data/HDFS.log \
             --out_df output/output.csv
 
-      - name: Upload cleaned CSV to Azure Blob with versioning
-        run: |
-          VERSION="run-${{ github.run_number }}-$(date +"%Y%m%d-%H%M%S")"
-          BLOB_NAME="datasets/hdfs_cleaned_${VERSION}.csv"
+      - name: Upload processed dataset as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-dataset
+          path: data/processed.csv
 
-          echo "Uploading as $BLOB_NAME"
-
-          az storage blob upload \
-            --container-name $AZURE_STORAGE_CONTAINER \
-            --file output/output.csv \
-            --name $BLOB_NAME \
-            --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
-        env:
-          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
