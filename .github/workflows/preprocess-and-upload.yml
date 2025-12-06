@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      AZURE_STORAGE_ACCOUNT: your_storage_account_name
       AZURE_STORAGE_CONTAINER: your-container-name
 
     steps:
@@ -36,11 +35,6 @@ jobs:
           python preprocess.py \
             --input data/HDFS.log \
             --out_df output/output.csv
-
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Upload cleaned CSV to Azure Blob with versioning
         run: |
