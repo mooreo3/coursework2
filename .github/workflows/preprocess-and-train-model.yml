@@ -27,7 +27,7 @@ jobs:
         run: |
           python preprocess.py \
             --input data/HDFS.log \
-            --out_df data/output.csv
+            --out_df output/output.csv
 
       - name: Train model
         run: |
