@@ -12,6 +12,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+import mlflow
+import mlflow.sklearn
+
 
 DATA_PATH = Path("output/output.csv")
 MODEL_DIR = Path("models")
@@ -31,48 +34,12 @@ def load_data(path: Path) -> pd.DataFrame:
     return df
 
 
-# def build_feature_target(df: pd.DataFrame):
-#     target_col = "is_same_src_dest"
-#
-#     # DO NOT USE ANY IP / SUBNET / IP-INT COLUMNS → they leak the target
-#     drop_cols = [
-#         target_col,
-#         # text / high-cardinality / not needed
-#         "msg",
-#         "timestamp",
-#         "date",
-#         "time",
-#         "block_id",
-#         "cls",
-#         "path",
-#         "node",
-#         # IP identity columns
-#         "src_ip", "dest_ip", "to_ip", "from_ip",
-#         "src_ip_int", "dest_ip_int", "to_ip_int", "from_ip_int",
-#         "src_subnet_24", "dest_subnet_24", "to_subnet_24", "from_subnet_24",
-#         # old label, irrelevant now
-#         "incident",
-#     ]
-#
-#     X = df.drop(columns=drop_cols, errors="ignore")
-#     y = df[target_col]
-#
-#     numeric_features = X.select_dtypes(
-#         include=["int64", "int32", "float64", "float32"]
-#     ).columns.tolist()
-#     categorical_features = [c for c in X.columns if c not in numeric_features]
-#
-#     print("Using features:")
-#     print("  Numeric:", numeric_features)
-#     print("  Categorical:", categorical_features)
-#
-#     return X, y, numeric_features, categorical_features
-
-def build_feature_target(df):
+def build_feature_target(df: pd.DataFrame):
     target_col = "is_same_src_dest"
 
-    # Keep only minimal behavioural features
-    keep = ["msg_len", "hour", "minute", "second"]
+    # Minimal behavioural features
+    # keep = ["msg_len", "hour", "minute", "second"]
+    keep = ["msg_len"]
 
     X = df[keep]
     y = df[target_col]
@@ -84,7 +51,6 @@ def build_feature_target(df):
     print(numeric_features)
 
     return X, y, numeric_features, categorical_features
-
 
 
 def build_pipeline(numeric_features, categorical_features):
@@ -112,7 +78,7 @@ def build_pipeline(numeric_features, categorical_features):
         n_estimators=200,
         random_state=42,
         n_jobs=-1,
-        class_weight="balanced",  # because 1s are probably rare
+        class_weight="balanced",
     )
 
     clf = Pipeline(
@@ -122,7 +88,7 @@ def build_pipeline(numeric_features, categorical_features):
         ]
     )
 
-    return clf
+    return clf, model
 
 
 def main(run_id: str):
@@ -144,28 +110,61 @@ def main(run_id: str):
         stratify=y,
     )
 
-    clf = build_pipeline(num_feats, cat_feats)
-    clf.fit(X_train, y_train)
+    clf, base_model = build_pipeline(num_feats, cat_feats)
 
-    y_pred = clf.predict(X_test)
+    # ---- MLflow setup ----
+    # Use external MLflow server if MLFLOW_TRACKING_URI is set,
+    # otherwise default local file store is used.
+    mlflow.set_experiment("self_loop_detection")
 
-    acc = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
+    with mlflow.start_run(run_name=f"run_{run_id}"):
+        # Log model hyperparams
+        mlflow.log_params({
+            "n_estimators": base_model.n_estimators,
+            "class_weight": base_model.class_weight,
+            "test_size": 0.2,
+            "random_state": 42,
+            "features": ",".join(num_feats),
+        })
 
-    print(f"Accuracy: {acc:.4f}")
-    print(f"F1 score: {f1:.4f}")
-    print("Classification report:")
-    print(classification_report(y_test, y_pred))
+        # Train
+        clf.fit(X_train, y_train)
 
-    model_path = MODEL_DIR / f"model_{run_id}.pkl"
-    metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
+        # Evaluate
+        y_pred = clf.predict(X_test)
 
-    joblib.dump(clf, model_path)
-    with open(metrics_path, "w") as f:
-        json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
+        acc = accuracy_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
 
-    print(f"Saved model to {model_path}")
-    print(f"Saved metrics to {metrics_path}")
+        print(f"Accuracy: {acc:.4f}")
+        print(f"F1 score: {f1:.4f}")
+        print("Classification report:")
+        print(classification_report(y_test, y_pred))
+
+        # Log metrics to MLflow
+        mlflow.log_metric("accuracy", acc)
+        mlflow.log_metric("f1", f1)
+
+        # Save local artifacts for CI (unchanged for your GHA + checks)
+        model_path = MODEL_DIR / f"model_{run_id}.pkl"
+        metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
+
+        joblib.dump(clf, model_path)
+        with open(metrics_path, "w") as f:
+            json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
+
+        print(f"Saved model to {model_path}")
+        print(f"Saved metrics to {metrics_path}")
+
+        # Log artifacts + model to MLflow
+        mlflow.log_artifact(str(metrics_path), artifact_path="metrics")
+
+        # Register the model in MLflow Model Registry
+        mlflow.sklearn.log_model(
+            clf,
+            artifact_path="model",
+            registered_model_name="selfloop_model"
+        )
 
 
 if __name__ == "__main__":
