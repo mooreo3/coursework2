@@ -38,14 +38,15 @@ def build_feature_target(df: pd.DataFrame):
     target_col = "is_same_src_dest"
 
     # Minimal behavioural features
-    # keep = ["msg_len", "hour", "minute", "second"]
-    keep = ["msg_len"]
+    keep = ["msg_len", "hour", "minute", "second"]
+    # keep = ["msg_len", "hour"]
+    # keep = ["msg_len"]
 
     X = df[keep]
     y = df[target_col]
 
     numeric_features = keep
-    categorical_features = []  # none
+    categorical_features = []
 
     print("Reduced feature set:")
     print(numeric_features)
@@ -95,7 +96,6 @@ def main(run_id: str):
     df = load_data(DATA_PATH)
     print(f"Loaded {len(df)} rows")
 
-    # Sanity check: class balance
     print("is_same_src_dest distribution:")
     print(df["is_same_src_dest"].value_counts())
     print(df["is_same_src_dest"].value_counts(normalize=True))
@@ -112,13 +112,9 @@ def main(run_id: str):
 
     clf, base_model = build_pipeline(num_feats, cat_feats)
 
-    # ---- MLflow setup ----
-    # Use external MLflow server if MLFLOW_TRACKING_URI is set,
-    # otherwise default local file store is used.
     mlflow.set_experiment("self_loop_detection")
 
     with mlflow.start_run(run_name=f"run_{run_id}"):
-        # Log model hyperparams
         mlflow.log_params({
             "n_estimators": base_model.n_estimators,
             "class_weight": base_model.class_weight,
@@ -127,10 +123,8 @@ def main(run_id: str):
             "features": ",".join(num_feats),
         })
 
-        # Train
         clf.fit(X_train, y_train)
 
-        # Evaluate
         y_pred = clf.predict(X_test)
 
         acc = accuracy_score(y_test, y_pred)
@@ -141,11 +135,9 @@ def main(run_id: str):
         print("Classification report:")
         print(classification_report(y_test, y_pred))
 
-        # Log metrics to MLflow
         mlflow.log_metric("accuracy", acc)
         mlflow.log_metric("f1", f1)
 
-        # Save local artifacts for CI (unchanged for your GHA + checks)
         model_path = MODEL_DIR / f"model_{run_id}.pkl"
         metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
 
@@ -156,15 +148,17 @@ def main(run_id: str):
         print(f"Saved model to {model_path}")
         print(f"Saved metrics to {metrics_path}")
 
-        # Log artifacts + model to MLflow
         mlflow.log_artifact(str(metrics_path), artifact_path="metrics")
 
-        # Register the model in MLflow Model Registry
-        mlflow.sklearn.log_model(
-            clf,
-            artifact_path="model",
-            registered_model_name="selfloop_model"
+        mlflow_model_dir = MODEL_DIR / f"mlflow_model_{run_id}"
+        mlflow_model_dir.mkdir(parents=True, exist_ok=True)
+
+        mlflow.sklearn.save_model(
+            sk_model=clf,
+            path=str(mlflow_model_dir)
         )
+
+        mlflow.log_artifacts(str(mlflow_model_dir), artifact_path="model")
 
 
 if __name__ == "__main__":
