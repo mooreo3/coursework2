@@ -1,4 +1,4 @@
-name: Preprocess, Train, Validate
+name: Preprocess, Train, Test, Validate
 
 env:
   RUN_ID: ${{ github.run_number }}
@@ -28,7 +28,7 @@ jobs:
 
       - name: Run unit and integration tests
         run: |
-          pytest
+          python -m pytest
 
       - name: Run preprocessing
         run: |
