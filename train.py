@@ -1,21 +1,17 @@
-from pathlib import Path
-import json
-
-import pandas as pd
 import argparse
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, classification_report
-import joblib
+import json
+from pathlib import Path
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--run-id", default="local")
-args = parser.parse_args()
-run_id = args.run_id
+import joblib
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+
 
 DATA_PATH = Path("output/output.csv")
 MODEL_DIR = Path("models")
@@ -25,44 +21,71 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 def load_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False)
 
-    if "incident" not in df.columns:
-        raise ValueError(
-            f"'incident' column not found in {path}. "
-            f"Make sure you're using the output from your preprocess script."
-        )
+    if "is_same_src_dest" not in df.columns:
+        raise ValueError("'is_same_src_dest' not found in dataframe")
 
-    df = df.dropna(subset=["incident"])
-
-    df["incident"] = df["incident"].astype(int)
+    # target as int
+    df = df.dropna(subset=["is_same_src_dest"])
+    df["is_same_src_dest"] = df["is_same_src_dest"].astype(int)
 
     return df
 
 
-def build_feature_target(df: pd.DataFrame):
-    drop_cols = [
-        "incident",
-        "date",
-        "time",
-        "msg",
-        "timestamp",
-        "block_id",
-        "src_ip",
-        "dest_ip",
-        "to_ip",
-        "from_ip",
-        "src_subnet_24",
-        "dest_subnet_24",
-        "to_subnet_24",
-        "from_subnet_24",
-    ]
+# def build_feature_target(df: pd.DataFrame):
+#     target_col = "is_same_src_dest"
+#
+#     # DO NOT USE ANY IP / SUBNET / IP-INT COLUMNS → they leak the target
+#     drop_cols = [
+#         target_col,
+#         # text / high-cardinality / not needed
+#         "msg",
+#         "timestamp",
+#         "date",
+#         "time",
+#         "block_id",
+#         "cls",
+#         "path",
+#         "node",
+#         # IP identity columns
+#         "src_ip", "dest_ip", "to_ip", "from_ip",
+#         "src_ip_int", "dest_ip_int", "to_ip_int", "from_ip_int",
+#         "src_subnet_24", "dest_subnet_24", "to_subnet_24", "from_subnet_24",
+#         # old label, irrelevant now
+#         "incident",
+#     ]
+#
+#     X = df.drop(columns=drop_cols, errors="ignore")
+#     y = df[target_col]
+#
+#     numeric_features = X.select_dtypes(
+#         include=["int64", "int32", "float64", "float32"]
+#     ).columns.tolist()
+#     categorical_features = [c for c in X.columns if c not in numeric_features]
+#
+#     print("Using features:")
+#     print("  Numeric:", numeric_features)
+#     print("  Categorical:", categorical_features)
+#
+#     return X, y, numeric_features, categorical_features
 
-    X = df.drop(columns=drop_cols, errors="ignore")
-    y = df["incident"]
+def build_feature_target(df):
+    target_col = "is_same_src_dest"
 
-    numeric_features = X.select_dtypes(include=["int64", "int32", "float64", "float32"]).columns.tolist()
-    categorical_features = [c for c in X.columns if c not in numeric_features]
+    # Keep only minimal behavioural features
+    # keep = ["msg_len", "hour", "minute", "second"]
+    keep = ["msg_len"]
+
+    X = df[keep]
+    y = df[target_col]
+
+    numeric_features = keep
+    categorical_features = []  # none
+
+    print("Reduced feature set:")
+    print(numeric_features)
 
     return X, y, numeric_features, categorical_features
+
 
 
 def build_pipeline(numeric_features, categorical_features):
@@ -90,6 +113,7 @@ def build_pipeline(numeric_features, categorical_features):
         n_estimators=200,
         random_state=42,
         n_jobs=-1,
+        class_weight="balanced",  # because 1s are probably rare
     )
 
     clf = Pipeline(
@@ -102,19 +126,26 @@ def build_pipeline(numeric_features, categorical_features):
     return clf
 
 
-def main():
+def main(run_id: str):
     df = load_data(DATA_PATH)
-    X, y, numeric_features, categorical_features = build_feature_target(df)
-
     print(f"Loaded {len(df)} rows")
-    print(f"Numeric features: {len(numeric_features)}")
-    print(f"Categorical features: {len(categorical_features)}")
+
+    # Sanity check: class balance
+    print("is_same_src_dest distribution:")
+    print(df["is_same_src_dest"].value_counts())
+    print(df["is_same_src_dest"].value_counts(normalize=True))
+
+    X, y, num_feats, cat_feats = build_feature_target(df)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
     )
 
-    clf = build_pipeline(numeric_features, categorical_features)
+    clf = build_pipeline(num_feats, cat_feats)
     clf.fit(X_train, y_train)
 
     y_pred = clf.predict(X_test)
@@ -128,9 +159,9 @@ def main():
     print(classification_report(y_test, y_pred))
 
     model_path = MODEL_DIR / f"model_{run_id}.pkl"
-    joblib.dump(clf, model_path)
-
     metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
+
+    joblib.dump(clf, model_path)
     with open(metrics_path, "w") as f:
         json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
 
@@ -139,4 +170,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-id", default="local")
+    args = parser.parse_args()
+    main(run_id=args.run_id)

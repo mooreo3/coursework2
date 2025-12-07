@@ -1,4 +1,4 @@
-name: Preprocess and Train Model
+name: Preprocess, Train, Validate
 
 env:
   RUN_ID: ${{ github.run_number }}
@@ -44,3 +44,7 @@ jobs:
           path: |
             models/model_v1.pkl
             models/metrics_v1.json
+
+      - name: Check metrics thresholds
+        run: |
+          python check_metrics.py $RUN_ID
