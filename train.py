@@ -72,8 +72,7 @@ def build_feature_target(df):
     target_col = "is_same_src_dest"
 
     # Keep only minimal behavioural features
-    # keep = ["msg_len", "hour", "minute", "second"]
-    keep = ["msg_len"]
+    keep = ["msg_len", "hour", "minute", "second"]
 
     X = df[keep]
     y = df[target_col]
