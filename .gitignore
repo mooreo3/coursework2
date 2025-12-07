@@ -5,3 +5,26 @@ output/*
 !output/.gitkeep
 mlflow.db
 mlruns/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ML artifacts
+mlruns/
+models/*.pkl
+models/mlflow_model_*/
+monitoring/
+
+# Generated data
+output/*.csv
+
+# OS junk
+.DS_Store
+Thumbs.db

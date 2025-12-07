@@ -1,6 +1,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import List, Optional
 
 import joblib
 import pandas as pd
@@ -33,27 +34,44 @@ def load_data(path: Path) -> pd.DataFrame:
     return df
 
 
-def build_feature_target(df: pd.DataFrame):
+def build_feature_target(df: pd.DataFrame, feature_list: List[str]):
+    """
+    Select features and target from the dataframe.
+
+    feature_list comes from CLI (e.g. ["msg_len", "hour", "minute", "second"])
+    so we can easily run multiple experiments with different feature sets.
+    """
     target_col = "is_same_src_dest"
 
-    # Minimal behavioural features
-    keep = ["msg_len", "hour", "minute", "second"]
-    # keep = ["msg_len", "hour"]
-    # keep = ["msg_len"]
+    keep = feature_list
+
+    missing = [f for f in keep if f not in df.columns]
+    if missing:
+        raise ValueError(f"Requested features not in dataframe columns: {missing}")
 
     X = df[keep]
     y = df[target_col]
 
     numeric_features = keep
-    categorical_features = []
+    categorical_features: List[str] = []
 
-    print("Reduced feature set:")
+    print("Using feature set:")
     print(numeric_features)
 
     return X, y, numeric_features, categorical_features
 
 
-def build_pipeline(numeric_features, categorical_features):
+def build_pipeline(
+    numeric_features: List[str],
+    categorical_features: List[str],
+    n_estimators: int,
+    max_depth: Optional[int],
+):
+    """
+    Build sklearn Pipeline with preprocessing + RandomForest.
+
+    n_estimators and max_depth are passed in so we can vary them between runs.
+    """
     numeric_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
@@ -75,7 +93,8 @@ def build_pipeline(numeric_features, categorical_features):
     )
 
     model = RandomForestClassifier(
-        n_estimators=200,
+        n_estimators=n_estimators,
+        max_depth=max_depth,
         random_state=42,
         n_jobs=-1,
         class_weight="balanced",
@@ -91,7 +110,12 @@ def build_pipeline(numeric_features, categorical_features):
     return clf, model
 
 
-def main(run_id: str):
+def main(
+    run_id: str,
+    features: List[str],
+    n_estimators: int,
+    max_depth: Optional[int],
+):
     df = load_data(DATA_PATH)
     print(f"Loaded {len(df)} rows")
 
@@ -99,7 +123,7 @@ def main(run_id: str):
     print(df["is_same_src_dest"].value_counts())
     print(df["is_same_src_dest"].value_counts(normalize=True))
 
-    X, y, num_feats, cat_feats = build_feature_target(df)
+    X, y, num_feats, cat_feats = build_feature_target(df, features)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -109,18 +133,21 @@ def main(run_id: str):
         stratify=y,
     )
 
-    clf, base_model = build_pipeline(num_feats, cat_feats)
+    clf, base_model = build_pipeline(num_feats, cat_feats, n_estimators, max_depth)
 
     mlflow.set_experiment("self_loop_detection")
 
     with mlflow.start_run(run_name=f"run_{run_id}"):
-        mlflow.log_params({
-            "n_estimators": base_model.n_estimators,
-            "class_weight": base_model.class_weight,
-            "test_size": 0.2,
-            "random_state": 42,
-            "features": ",".join(num_feats),
-        })
+        mlflow.log_params(
+            {
+                "n_estimators": base_model.n_estimators,
+                "max_depth": base_model.max_depth,
+                "class_weight": base_model.class_weight,
+                "test_size": 0.2,
+                "random_state": 42,
+                "features": ",".join(num_feats),
+            }
+        )
 
         clf.fit(X_train, y_train)
 
@@ -137,12 +164,15 @@ def main(run_id: str):
         mlflow.log_metric("accuracy", acc)
         mlflow.log_metric("f1", f1)
 
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
         model_path = MODEL_DIR / f"model_{run_id}.pkl"
         metrics_path = MODEL_DIR / f"metrics_{run_id}.json"
 
         joblib.dump(clf, model_path)
         with open(metrics_path, "w") as f:
             json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
+
 
         print(f"Saved model to {model_path}")
         print(f"Saved metrics to {metrics_path}")
@@ -154,7 +184,7 @@ def main(run_id: str):
 
         mlflow.sklearn.save_model(
             sk_model=clf,
-            path=str(mlflow_model_dir)
+            path=str(mlflow_model_dir),
         )
 
         mlflow.log_artifacts(str(mlflow_model_dir), artifact_path="model")
@@ -163,5 +193,33 @@ def main(run_id: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-id", default="local")
+
+    parser.add_argument(
+        "--features",
+        default="msg_len,hour,minute,second",
+        help="Comma-separated list of feature names to use",
+    )
+
+    parser.add_argument(
+        "--n-estimators",
+        type=int,
+        default=100,
+        help="Number of trees in the RandomForest",
+    )
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=10,
+        help="Max depth of trees in the RandomForest (None = unlimited)",
+    )
+
     args = parser.parse_args()
-    main(run_id=args.run_id)
+
+    feature_list = [f.strip() for f in args.features.split(",") if f.strip()]
+
+    main(
+        run_id=args.run_id,
+        features=feature_list,
+        n_estimators=args.n_estimators,
+        max_depth=args.max_depth,
+    )
