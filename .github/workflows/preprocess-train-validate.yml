@@ -42,8 +42,8 @@ jobs:
         with:
           name: model-and-metrics
           path: |
-            models/model_v1.pkl
-            models/metrics_v1.json
+            models/model_$RUN_ID.pkl
+            models/metrics_$RUN_ID.json
 
       - name: Check metrics thresholds
         run: |
