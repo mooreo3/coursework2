@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 if ($args.Length -eq 0) {
     Write-Host "ERROR: You must provide a run ID."
     Write-Host "Example:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File .\serve-model.ps1 demo_msg_plus_time_deep"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File .\serve-model.ps1 demo_msg_plus_time"
     exit 1
 }
 

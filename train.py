@@ -16,6 +16,8 @@ from sklearn.preprocessing import OneHotEncoder
 import mlflow
 import mlflow.sklearn
 
+from monitor import save_training_stats
+
 
 DATA_PATH = Path("output/output.csv")
 MODEL_DIR = Path("models")
@@ -123,6 +125,8 @@ def main(
     print(df["is_same_src_dest"].value_counts())
     print(df["is_same_src_dest"].value_counts(normalize=True))
 
+    save_training_stats(df)
+
     X, y, num_feats, cat_feats = build_feature_target(df, features)
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -135,7 +139,7 @@ def main(
 
     clf, base_model = build_pipeline(num_feats, cat_feats, n_estimators, max_depth)
 
-    mlflow.set_experiment("self_loop_detection")
+    mlflow.set_experiment("self_loop_detection_v2")
 
     with mlflow.start_run(run_name=f"run_{run_id}"):
         mlflow.log_params(
@@ -172,7 +176,6 @@ def main(
         joblib.dump(clf, model_path)
         with open(metrics_path, "w") as f:
             json.dump({"accuracy": acc, "f1": f1}, f, indent=2)
-
 
         print(f"Saved model to {model_path}")
         print(f"Saved metrics to {metrics_path}")
