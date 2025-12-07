@@ -30,7 +30,7 @@ jobs:
         run: |
           python preprocess.py \
             --input data/HDFS.log \
-            --out_df output/output.csv
+            --out_df output/output.csv \
             --run-id $RUN_ID
 
       - name: Train model
