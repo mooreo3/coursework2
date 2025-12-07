@@ -30,8 +30,13 @@ jobs:
         run: |
           python preprocess.py \
             --input data/HDFS.log \
-            --out_df output/output.csv \
-            --run_id ${{ env.RUN_ID }}
+            --out_df output/output.csv
+
+      - name: Upload preprocessed data
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprocessed-data-${{ env.RUN_ID }}
+          path: output/output.csv
 
       - name: Train model
         run: |
@@ -48,3 +53,4 @@ jobs:
       - name: Check metrics thresholds
         run: |
           python check_metrics.py ${{ env.RUN_ID }}
+

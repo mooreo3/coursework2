@@ -221,11 +221,11 @@ def parse_log_file(input_file_path):
     return dataframe
 
 
-def run(input_path, output_dataframe_path=None, run_id=None):
+def run(input_path, output_dataframe_path=None):
     dataframe = parse_log_file(input_path)
 
     if output_dataframe_path:
-        output_path = Path(output_dataframe_path+run_id)
+        output_path = Path(output_dataframe_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if output_path.suffix.lower() != '.csv':
             output_path = output_path.with_suffix('.csv')
@@ -234,14 +234,13 @@ def run(input_path, output_dataframe_path=None, run_id=None):
     return dataframe
 
 
+
 if __name__ == '__main__':
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('--input', required=True)
     argument_parser.add_argument('--out_df', default=None)
-    argument_parser.add_argument('--run_id', default=None)
     parsed_arguments = argument_parser.parse_args()
     run(
         input_path=parsed_arguments.input,
-        output_dataframe_path=parsed_arguments.out_df,
-        run_id=parsed_arguments.run_id
+        output_dataframe_path=parsed_arguments.out_df
     )
