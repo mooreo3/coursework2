@@ -31,11 +31,11 @@ jobs:
           python preprocess.py \
             --input data/HDFS.log \
             --out_df output/output.csv \
-            --run_id $RUN_ID
+            --run_id ${{ env.RUN_ID }}
 
       - name: Train model
         run: |
-          python train.py --run-id $RUN_ID
+          python train.py --run-id ${{ env.RUN_ID }}
 
       - name: Upload model artifacts
         uses: actions/upload-artifact@v4
@@ -47,4 +47,4 @@ jobs:
 
       - name: Check metrics thresholds
         run: |
-          python check_metrics.py $RUN_ID
+          python check_metrics.py ${{ env.RUN_ID }}

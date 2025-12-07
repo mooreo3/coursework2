@@ -27,7 +27,6 @@ def load_data(path: Path) -> pd.DataFrame:
     if "is_same_src_dest" not in df.columns:
         raise ValueError("'is_same_src_dest' not found in dataframe")
 
-    # target as int
     df = df.dropna(subset=["is_same_src_dest"])
     df["is_same_src_dest"] = df["is_same_src_dest"].astype(int)
 
