@@ -53,7 +53,7 @@ def detect_drift(threshold=3.0):
     base_std = baseline["msg_len_std"]
 
     if abs(current_mean - base_mean) > threshold * base_std:
-        print("⚠️ DRIFT DETECTED")
+        print("DRIFT DETECTED")
         return True
 
     print("No drift detected.")

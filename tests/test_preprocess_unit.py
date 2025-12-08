@@ -7,7 +7,6 @@ from preprocess import (
     ip_to_subnet_24,
 )
 
-
 def test_parse_header_valid_line():
     line = "240101 123045 123 INFO org.apache.hadoop.hdfs.DataNode: Received block blk_-1"
     header = parse_header(line)

@@ -25,8 +25,6 @@ def main():
 
     preds = clf.predict(samples)
 
-    for _, row in samples.iterrows():
-        features = [row["msg_len"], row["hour"], row["minute"], row["second"]]
     for features, pred in zip(samples.values.tolist(), preds):
         print(f"Features={features} -> pred={pred}")
         log_prediction(features, int(pred))
