@@ -8,7 +8,7 @@ TRAINING_STATS = Path("monitoring/training_stats.json")
 
 PREDICTION_LOG.parent.mkdir(parents=True, exist_ok=True)
 
-
+#
 def save_training_stats(df: pd.DataFrame):
     stats = {
         "msg_len_mean": float(df["msg_len"].mean()),
